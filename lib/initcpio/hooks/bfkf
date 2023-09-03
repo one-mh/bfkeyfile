@@ -7,12 +7,16 @@ run_hook ()
     if [ "x${bfkf}" != "x" ]; then
         encfile="/enc_keyfile.bin"
         decfile="/crypto_keyfile.bin"
+        fifo_file="/pass.pipe"
+        mkfifo $fifo_file
+        exec 6<>$fifo_file
+        rm $fifo_file
 
         iteration=1000
         attempts=5
 
         prompt="Enter password: "
-        badpassword="Password incorrect"
+        badpassword="Password incorrect."
 
         dev="$(echo "${bfkf}" | cut -d: -f1)"
         arg1="$(echo "${bfkf}" | cut -d: -f2)"
@@ -41,7 +45,8 @@ run_hook ()
                     password=`echo -n "${password}" | openssl dgst -whirlpool -hex 2> /dev/null | cut -d ' ' -f 2`
                     i=$(( ${i} + 1 ))
                 done
-                openssl bf-cbc -pass pass:"${password}" -d -in "${encfile}" -out "${decfile}" >/dev/null 2>&1
+                echo -n "${password}" >&6
+                openssl aes-256-cbc -pass fd:6 -d -pbkdf2 -in "${encfile}" -out "${decfile}" >/dev/null 2>&1
                 retcode="$?"
                 if [ "${retcode}" != "0" ]; then
                     echo -e "\n${badpassword}\n"
@@ -57,4 +62,5 @@ run_hook ()
             echo "Encrypted keyfile could not be opened. Reverting to 'encrypt' hook."
         fi
     fi
+    exec 6>&-
 }

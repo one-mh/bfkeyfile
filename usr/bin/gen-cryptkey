@@ -32,7 +32,12 @@ main () {
 
 crypt () {
 	encfile="enc_keyfile.bin"
+    pass_fifo=/tmp/pass_pipe
+    mkfifo $pass_fifo
+    exec 6<>$pass_fifo
+    rm $pass_fifo
 
+    mkfifo /tmp/password
 	echo "$encfile encrypted keyfile will be created"
 	echo ''
 	read -rsp "Enter password: " password
@@ -45,16 +50,21 @@ crypt () {
 		for (( i=1; i<=$iteration; i++ )); do
 			password=`echo -n "$password" | openssl dgst -whirlpool -hex | cut -d ' ' -f 2`
 		done
-
-		dd if=/dev/urandom bs=1k count=256 | openssl bf-cbc -pass pass:"${password}" -salt -out "${encfile}"
+         echo -n "$password" >&6
+		dd if=/dev/urandom bs=1k count=256 | openssl enc -aes-256-cbc -pbkdf2 -pass fd:6 -salt -out "${encfile}"
 	else
 		echo "Passwords did not match"
 	fi
+    exec 6>&-
 }
 
 decrypt () {
 	encfile=$1
 	decfile="crypto_keyfile.bin"
+    pass_fifo=/tmp/pass_pipe
+    mkfifo $pass_fifo
+    exec 6<>$pass_fifo
+    rm $pass_fifo
 
 	echo "$encfile Will be decrypted to crypto_keyfile.bin"
 	echo ''
@@ -63,8 +73,9 @@ decrypt () {
 	for (( i=1; i<=$iteration; i++ )); do
 		password=`echo -n "$password" | openssl dgst -whirlpool -hex | cut -d ' ' -f 2`
 	done
-
-	openssl bf-cbc -pass pass:"${password}" -d -in "${encfile}" -out "${decfile}"
+    echo -n "$password" >&6
+	openssl enc -aes-256-cbc -pass fd:6 -d -in "${encfile}" -out "${decfile}"
+    exec 6>&-
 }
 
 main $@
